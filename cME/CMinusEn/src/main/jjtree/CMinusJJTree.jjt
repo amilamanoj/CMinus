@@ -1,0 +1,480 @@
+/* =====================================================================================================================
+
+ * W.G.H. Amila Manoj Silva
+ * 080475F
+   ___|        \  | _)
+  |           |\/ |  |  __ \   |   |   __|
+  |   _____|  |   |  |  |   |  |   | \__ \
+ \____|      _|  _| _| _|  _| \__,_| ____/
+
+======================================================================================================================*/
+
+
+
+ // ======================================== a bunch of optional parameters ============================================
+ // ====================================================================================================================
+options {
+   STATIC = false;   // this allows only one parser object to be present default: true
+   SANITY_CHECK = true; // performs syntactic and semantic checks such as detection of left recursion, detection of ambiguity and bad usage of empty expansions
+   IGNORE_CASE = false;  // generated token manager ignores case in the token specifications and the input files default: false
+//   CHOICE_AMBIGUITY_CHECK = 2;  the number of tokens considered in checking choices of the form "A | B | ..." for ambiguity
+     JAVA_UNICODE_ESCAPE = true; // the generated parser uses an input stream object that processes Java Unicode escapes
+//     NODE_DEFAULT_VOID=true; // treat all undecorated non-terminals as if they were decorated as #void
+ }
+
+// ================================= this block must be there in a javacc grammer file =================================
+// =====================================================================================================================
+ PARSER_BEGIN(CMinusParser)
+
+    package org.amila.cm;
+
+    public class CMinusParser {
+        ParseResult result = new ParseResult();
+        public ParseResult Parse(){
+
+               try {
+               Program().dump("");
+               }
+               catch (ParseException e){
+               result.addException(e);
+               }
+               return result;
+        }
+
+    }
+
+ PARSER_END(CMinusParser)
+
+// ============================ regular expression declarations for lexical analizer generation ========================
+// =====================================================================================================================
+
+/* white space is to be ignored*/
+SKIP :
+{
+  " "    // blanks
+| "\t"   // tab
+| "\n"   // new line (line feed) character
+| "\r"   // carriage return character (these and new line characters are skipped)
+| "\f"
+}
+
+
+/* COMMENTS */
+
+SKIP :
+{
+  "/*" : WithinComment
+}
+
+<WithinComment> SKIP :
+{
+  "*/" : DEFAULT
+}
+
+<WithinComment> MORE :
+{
+  <~[]>
+}
+
+
+/* keywords of c- */
+TOKEN :
+{
+ < ELSE: "else" >
+| < IF: "if" >
+| < INT: "int" >
+| < RETURN: "return" >
+| < VOID: "void" >
+| < WHILE: "while" >
+}
+
+/* identifier */
+TOKEN :
+{
+  < ID: <letter> (<letter>)* >
+|
+  < #letter:
+      [
+         "A"-"Z",
+         "a"-"z"
+      ]
+  >
+}
+
+/* Number */
+TOKEN :
+{
+  < NUM: <digit> (<digit>)* >
+|
+  < #digit:
+      [
+         "0"-"9"
+      ]
+  >
+
+}
+
+/* SEPARATORS */
+TOKEN :
+{
+  < LPAREN: "(" >
+| < RPAREN: ")" >
+| < LBRACE: "{" >
+| < RBRACE: "}" >
+| < LBRACKET: "[" >
+| < RBRACKET: "]" >
+| < SEMICOLON: ";" >
+| < COMMA: "," >
+| < DOT: "." >
+}
+
+/* OPERATORS */
+TOKEN :
+{
+  < PLUS: "+" >
+| < MINUS: "-" >
+| < STAR: "*" >
+| < SLASH: "/" >
+|  < ASSIGN: "=" >
+| < LT: "<" >
+| < RT: ">" >
+| < COLON: ":" >
+| < EQ: "==" >
+| < LE: "<=" >
+| < GE: ">=" >
+| < NE: "!=" >
+
+}
+
+// ================================ C-Minus grammar for parser generation in BNF form ==================================
+// =====================================================================================================================
+
+// 1
+SimpleNode Program():
+{
+//System.out.println("Program");
+}
+{
+    DeclarationList() <EOF>
+    { return jjtThis; }
+}
+
+// 2
+// Original production rule: DL -> DL D | D
+// this causes left-recursion
+// can be replace with: DL -> D DL' and DL' -> D DL'
+// but, since javacc allows EBNF, there is an easy way :)
+// we can just replace it with: DL -> D (D)* aka DL -> D { D }
+void DeclarationList():
+{
+//System.out.println("DeclarationList");
+}
+{
+    Declaration() ( Declaration() )*
+}
+
+// 3
+// here first two token for both Variable and Function declarations can be same
+// Eg. Typespecifier() <ID>.
+// therefore parser can only tell the difference by looking ahead 3 tokens
+// (it's a function declaration if it has "(" as the 3rd token
+// used lookahead for readability
+// (so language constructs var decl and func decl are clearly identifiable)
+void Declaration():
+{
+//System.out.println("Declaration");
+}
+{
+    LOOKAHEAD(3)
+    VariableDeclaration() | FunctionDeclaration()
+}
+
+// 4
+// Original Rule
+//void VariableDeclaration():
+//{}
+//{
+//    LOOKAHEAD(3)
+//    TypeSpecifier() <ID> ";" |  TypeSpecifier() <ID> "[" <NUM> "]" ";"
+//}
+
+// 4
+// First step of left refactoring
+//void VariableDeclaration():
+//{}
+//{
+//    TypeSpecifier() <ID> VariableDeclarationDash()
+//}
+
+// 4
+// Second step of left refactoring
+//void VariableDeclaration()Dash:
+//{}
+//{
+//    // no LOOKAHEAD(3) needed
+//    ";" | "[" <NUM> "]" ";"
+//}
+
+
+
+// 4 Modified using EBNF.
+// so that TypeSpecifier and <ID> get consumed anyway. no lookahead needed.
+// btw [ E ] and ( E )? are equivalent
+void VariableDeclaration():
+{
+//System.out.println("VariableDeclaration");
+}
+{
+    TypeSpecifier() <ID> [ "[" <NUM> "]" ] ";"
+}
+
+// 5
+void TypeSpecifier():
+{
+//System.out.println("TypeSpecifier");
+}
+{
+    <INT> | <VOID>
+}
+
+// 6
+void FunctionDeclaration():
+{
+//System.out.println("FunctionDeclaration");
+}
+{
+    TypeSpecifier() <ID> "(" Params() ")" CompoundStatement()
+}
+
+// 7
+void Params():
+{
+//System.out.println("Params");
+}
+{
+    LOOKAHEAD(2)
+    ParamList() | <VOID>
+}
+
+// 8
+void ParamList():
+{
+//System.out.println("ParamList");
+}
+{
+   Param() ( "," Param() )*
+}
+
+// 9
+void Param():
+{
+//System.out.println("Param");
+}
+{
+    LOOKAHEAD(TypeSpecifier() <ID> "[")
+    TypeSpecifier() <ID> "[" "]" | TypeSpecifier() <ID>
+}
+
+// 10
+void CompoundStatement():
+{
+//System.out.println("CompoundStatement");
+}
+{
+    try {
+    "{" LocalDeclarations() StatementList() "}"
+    } catch (ParseException e) {
+
+         errorSkipTo(RBRACE);
+    }
+}
+
+// 11
+// Original production rule: LD -> LD VD | e
+void LocalDeclarations():
+{
+//System.out.println("LocalDeclarations");
+}
+{
+    ( VariableDeclaration() )*
+}
+
+//12
+// Original production rule: SL -> SL S | e
+void StatementList():
+{//System.out.println("StatementList");
+}
+{
+   ( Statement() )*
+}
+
+//13
+void Statement():
+{//System.out.println("Statement");
+}
+{
+    LOOKAHEAD(Var())
+   ExpressionStatement() | CompoundStatement() | SelectionStatement()
+   | IterationStatement() | ReturnStatement()
+}
+
+//14
+// Deep Error Recovery (Panic Mode)
+void ExpressionStatement():
+{//System.out.println("ExpressionStatement");
+}
+{
+    try {
+    Expression() ";" | ";"
+    } catch (ParseException e) {
+      errorSkipTo(SEMICOLON);
+    }
+}
+
+JAVACODE
+void errorSkipTo(int kind) {
+  ParseException e = generateParseException();  // generate the exception object.
+  // System.err.println(e.toString());  // print the error message
+    result.addException(e);
+  Token t;
+  do {
+    t = getNextToken();
+  } while (t.kind != kind);
+    // The above loop consumes tokens all the way up to a token of
+    // "kind".  We use a do-while loop rather than a while because the
+    // current token is the one immediately before the erroneous token
+    // (in our case the token immediately before what should have been
+    // "if"/"while".
+}
+
+//15
+/*
+* The disambiguating algorithm of JavaCC automatically binds dangling
+* else's to the innermost if statement.  The LOOKAHEAD specification
+* is to tell JavaCC that we know what we are doing.
+*/
+void SelectionStatement():
+{//System.out.println("SelectionStatement");
+}
+{
+    "if" "(" Expression() ")" Statement() [ LOOKAHEAD(1) "else" Statement() ]
+}
+
+//16
+void IterationStatement():
+{//System.out.println("IterationStatement");
+}
+{
+    "while" "(" Expression() ")" Statement()
+}
+
+//17
+void ReturnStatement():
+{//System.out.println("ReturnStatement");
+}
+{
+    "return" ( Expression() )? ";"
+}
+
+//18
+void Expression():
+{//System.out.println("Expression");
+}
+{
+    LOOKAHEAD( Var() "=" )
+    Var() "=" Expression() | SimpleExpression()
+}
+
+//19  modified using EBNF
+void Var():
+{//System.out.println("Var");
+}
+{
+    LOOKAHEAD( <ID> "[" )
+    <ID> "[" Expression() "]" | <ID>
+}
+
+//20
+void SimpleExpression():
+{//System.out.println("SimpleExpression");
+}
+{
+    LOOKAHEAD(AdditiveExpression() RelOperator())
+    AdditiveExpression() RelOperator() AdditiveExpression() | AdditiveExpression()
+}
+
+//21
+void RelOperator():
+{//System.out.println("RelOperator");
+}
+{
+    "<=" | "<" | ">" | ">=" | "==" | "!="
+}
+
+//22
+// Original production rule: AE -> AE AO TERM | TERM
+void AdditiveExpression():
+{//System.out.println("AdditiveExpression");
+}
+{
+    Term() ( AppOP() Term() )*
+}
+
+//23
+void AppOP():
+{//System.out.println("AppOP");
+}
+{
+    "+" | "-"
+}
+
+//24
+// Original production rule: Term -> Term MO FT | FT
+void Term():
+{//System.out.println("Term");
+}
+{
+    Factor() ( MulOp() Factor() )*
+}
+
+//25
+void MulOp():
+{//System.out.println("MulOp");
+}
+{
+    "*" | "/"
+}
+
+//26
+void Factor():
+{//System.out.println("Factor");
+}
+{
+    LOOKAHEAD( <ID> "(" )
+     Call() | Var() |"(" Expression() ")" |  <NUM>
+}
+
+//27
+void Call():
+{//System.out.println("Call");
+}
+{
+    LOOKAHEAD( <ID> "(" ")" )
+    <ID> "(" ")" | <ID> "(" ArgList() ")"
+}
+
+//28
+//void Args():
+//{}
+//{
+//    ArgList() | ""
+//}
+
+//29
+void ArgList():
+{//System.out.println("ArgList");
+}
+{
+    Expression() ( "," Expression() )*
+}
+

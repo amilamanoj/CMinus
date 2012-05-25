@@ -1,0 +1,7 @@
+/* this is a multi-
+-line comment */
+
+void main (void)
+{ 
+if (k==1) k=k+1; if (m==2) m=n-1; else n=n+2;
+}
